@@ -1,0 +1,104 @@
+#! /bin/bash
+
+statusMessage()
+{
+    normal=$(tput sgr0)
+    success=$(tput setaf 2)
+    warning=$(tput setaf 3)
+    failure=$(tput setaf 1)
+    spaces=$( expr $(tput cols) - ${#2} + 8 )
+
+    echo -n $2
+    case $1 in
+        0 ) printf "%*s\n" $spaces "${failure}[Failed]${normal}";;
+        1 ) printf "%*s\n" $spaces "${success}[Success]${normal}";;
+        2 ) printf "%*s\n" $spaces "${warning}[Warning]${normal}";;
+    esac
+}
+
+declare -a repos;
+repos=("")
+
+read -p "Which kind of enviroment are you about to deploy? dev/prod? " deploymentType
+while true
+do
+    case $deploymentType in
+        dev ) deploymentType=dev
+            break;;
+
+        prod ) deploymentType=prod
+            break;;
+
+        * ) read -p "Please enter either dev or prod " deploymentType;;
+    esac
+done
+
+# Create temporary folder.
+if mkdir .deployment-ftd; then
+    cd .deployment-ftd
+    statusMessage 1 "Created tempory folder"
+else
+    statusMessage 0 "Failed to create temporary folder"
+    exit 0
+fi
+
+# Clone all repos.
+for i in ${repos[@]}
+do
+    if git clone $i; then
+        statusMessage 1 "Cloned repo ${i}"
+    else
+        statusMessage 0 "Failed to clone repo ${i}"
+        exit 0
+    fi
+done
+
+# Install Node dependencies.
+cd the-game/server
+if npm install; then
+    statusMessage 1 "Node Dependencies installed"
+    cd ../..
+else
+    statusMessage 0 "Failed to install Node dependencies"
+    cd ../..
+    exit 0
+fi
+
+# Install Symfony dependencies.
+cd backend
+if php composer.phar install; then
+    statusMessage 1 "Symfony dependencies"
+    cd ..
+else
+    statusMessage 0 "Failed to install Symfony dependency"
+    cd ..
+    exit 0
+fi
+
+# Create symbolic links.
+if ln -s web/ingame the-game/client; then
+    statusMessage 1 "Created symbolic link to game"
+else
+    statusMessage 0 "Failed to create symbolic link to game"
+    exit 0
+fi
+
+if ln -s web/rest backend/web; then
+    statusMessage 1 "Created symbolic link to game"
+else
+    statusMessage 0 "Failed to create symbolic link to game"
+    exit 0
+fi
+
+# Move build into place.
+cd ..
+if mv .deployment-ftd fantasytd; then
+    statusMessage 1 "Moved build into place"
+else
+    statusMessage 0 "Failed to move build into place"
+    exit 0
+fi
+
+# Congratz on build.
+statusMessage 1 "Succesfully deployed FantasyTD"
+exit 1
